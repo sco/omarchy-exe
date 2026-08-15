@@ -6,111 +6,99 @@ import qs.Commons
 Item {
   id: root
 
-  property var settings: ({})
+  property int refreshIntervalSec: 30
   property var vms: []
   property bool refreshing: false
+  property bool needsAuth: false
   property string lastError: ""
   property string actionStatus: ""
-  readonly property int refreshIntervalSec: intSetting("refreshIntervalSec", 30, 5, 3600)
-  readonly property bool busy: listProcess.running || actionProcess.running
 
-  property string _listOutput: ""
-  property string _listError: ""
-  property string _actionOutput: ""
-  property string _actionError: ""
-  property string _actionLabel: ""
+  property string operation: ""
+  property string successMessage: ""
 
-  function setting(name, fallback) {
-    var value = settings ? settings[name] : undefined
-    return value === undefined || value === null ? fallback : value
+  function sshCommand(args) {
+    return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "exe.dev"].concat(args)
   }
 
-  function intSetting(name, fallback, min, max) {
-    var value = parseInt(String(setting(name, fallback)), 10)
-    if (!isFinite(value)) value = fallback
-    return Math.max(min, Math.min(max, value))
-  }
-
-  function compactError(value, fallback) {
-    var text = String(value || "").replace(/\s+/g, " ").trim()
-    if (text === "") text = fallback
+  function compact(value, fallback) {
+    var text = String(value || "").replace(/\s+/g, " ").trim() || fallback
     return text.length > 180 ? text.substring(0, 177) + "…" : text
   }
 
+  function run(command, nextOperation, pending, success) {
+    if (process.running) return
+    operation = nextOperation
+    successMessage = success || ""
+    actionStatus = pending || ""
+    lastError = ""
+    process.command = command
+    process.running = true
+  }
+
   function refresh() {
-    if (listProcess.running) return
-    _listOutput = ""
-    _listError = ""
+    if (process.running) return
     refreshing = true
-    listProcess.command = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "exe.dev", "ls", "--json"]
-    listProcess.running = true
+    run(sshCommand(["ls", "--json"]), "list", "", "")
   }
 
   function applyList(raw) {
     try {
       var parsed = JSON.parse(String(raw || "{}"))
-      var records = parsed instanceof Array ? parsed : (parsed.vms instanceof Array ? parsed.vms : [])
-      var next = []
-      for (var i = 0; i < records.length; i++) {
-        var vm = records[i] || {}
-        next.push({
+      var records = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.vms) ? parsed.vms : [])
+      vms = records.map(function(vm) {
+        return {
           vm_name: String(vm.vm_name || vm.name || "Unnamed VM"),
           status: String(vm.status || "unknown"),
           region_display: String(vm.region_display || vm.region || ""),
           ssh_dest: String(vm.ssh_dest || ""),
           https_url: String(vm.https_url || "")
-        })
-      }
-      vms = next
+        }
+      })
+      needsAuth = false
       lastError = ""
     } catch (error) {
-      lastError = "exe.dev returned invalid JSON: " + compactError(error, "parse failed")
+      lastError = "exe.dev returned invalid JSON: " + compact(error, "parse failed")
     }
+  }
+
+  function applyFailure(raw) {
+    var message = compact(raw, "Could not reach exe.dev.")
+    var lower = message.toLowerCase()
+    needsAuth = lower.indexOf("permission denied") !== -1
+      || lower.indexOf("register") !== -1
+      || lower.indexOf("authentication failed") !== -1
+    lastError = needsAuth ? "" : message
+  }
+
+  function openSetup() {
+    Quickshell.execDetached(["omarchy-launch-terminal", "ssh", "exe.dev"])
+  }
+
+  function openSignIn() {
+    Qt.openUrlExternally("https://exe.dev/auth")
   }
 
   function openTerminal(vm) {
-    if (!vm || !vm.ssh_dest) {
-      lastError = "This VM has no SSH destination."
-      return
-    }
-    Quickshell.execDetached(["omarchy-launch-terminal", "ssh", String(vm.ssh_dest)])
+    if (vm && vm.ssh_dest) Quickshell.execDetached(["omarchy-launch-terminal", "ssh", String(vm.ssh_dest)])
   }
 
   function openHttps(vm) {
-    if (!vm || !vm.https_url) {
-      lastError = "This VM has no HTTPS URL."
-      return
-    }
-    Qt.openUrlExternally(String(vm.https_url))
+    if (vm && vm.https_url) Qt.openUrlExternally(String(vm.https_url))
+    else lastError = "This VM has no HTTPS URL."
   }
 
   function copySshDestination(vm) {
-    if (!vm || !vm.ssh_dest) {
-      lastError = "This VM has no SSH destination to copy."
-      return
-    }
+    if (!vm || !vm.ssh_dest) return
     Quickshell.execDetached(["bash", "-c", "printf %s " + Util.shellQuote(String(vm.ssh_dest)) + " | wl-copy"])
     showStatus("Copied " + String(vm.ssh_dest))
   }
 
   function restartVm(vm) {
-    if (!vm || !vm.vm_name) return
-    runAction(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "exe.dev", "restart", String(vm.vm_name), "--json"], "Restarting " + String(vm.vm_name) + "…")
+    if (vm && vm.vm_name) run(sshCommand(["restart", String(vm.vm_name), "--json"]), "action", "Restarting " + vm.vm_name + "…", "Restarted " + vm.vm_name)
   }
 
   function createVm() {
-    runAction(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "exe.dev", "new", "--json"], "Creating a VM…")
-  }
-
-  function runAction(command, label) {
-    if (actionProcess.running) return
-    _actionOutput = ""
-    _actionError = ""
-    _actionLabel = label
-    actionStatus = label
-    lastError = ""
-    actionProcess.command = command
-    actionProcess.running = true
+    run(sshCommand(["new", "--json"]), "action", "Creating a VM…", "VM created")
   }
 
   function showStatus(message) {
@@ -119,7 +107,7 @@ Item {
   }
 
   Timer {
-    interval: root.refreshIntervalSec * 1000
+    interval: Math.max(5, root.refreshIntervalSec) * 1000
     repeat: true
     running: true
     triggeredOnStart: true
@@ -141,36 +129,27 @@ Item {
   }
 
   Process {
-    id: listProcess
+    id: process
     running: false
     command: []
-    stdout: StdioCollector { id: listStdout; waitForEnd: true; onStreamFinished: root._listOutput = text }
-    stderr: StdioCollector { id: listStderr; waitForEnd: true; onStreamFinished: root._listError = text }
+    stdout: StdioCollector { id: outputCollector; waitForEnd: true }
+    stderr: StdioCollector { id: errorCollector; waitForEnd: true }
     onExited: function(exitCode) {
+      var currentOperation = root.operation
+      var output = String(outputCollector.text || "")
+      var error = String(errorCollector.text || "")
       root.refreshing = false
-      var stdout = String(listStdout.text || root._listOutput || "")
-      var stderr = String(listStderr.text || root._listError || "")
-      if (exitCode === 0) root.applyList(stdout)
-      else root.lastError = root.compactError(stderr || stdout, "Could not reach exe.dev. Check your network, SSH key, and exe.dev access.")
-    }
-  }
+      root.actionStatus = ""
 
-  Process {
-    id: actionProcess
-    running: false
-    command: []
-    stdout: StdioCollector { id: actionStdout; waitForEnd: true; onStreamFinished: root._actionOutput = text }
-    stderr: StdioCollector { id: actionStderr; waitForEnd: true; onStreamFinished: root._actionError = text }
-    onExited: function(exitCode) {
-      var stdout = String(actionStdout.text || root._actionOutput || "")
-      var stderr = String(actionStderr.text || root._actionError || "")
-      if (exitCode === 0) {
-        root.lastError = ""
-        root.showStatus(root._actionLabel.replace(/…$/, "") + " complete")
-        delayedRefresh.restart()
+      if (exitCode !== 0) {
+        root.applyFailure(error || output)
+      } else if (currentOperation === "list") {
+        root.applyList(output)
       } else {
-        root.actionStatus = ""
-        root.lastError = root.compactError(stderr || stdout, "exe.dev command failed. Check SSH and account access.")
+        root.needsAuth = false
+        root.lastError = ""
+        root.showStatus(root.successMessage)
+        delayedRefresh.restart()
       }
     }
   }
