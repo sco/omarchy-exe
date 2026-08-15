@@ -10,11 +10,12 @@ A compact, keyboard-first Omarchy bar plugin for browsing and managing [exe.dev]
 - Opens a VM's HTTPS URL
 - Restarts a VM, copies its SSH destination, or creates a default VM
 - Refreshes whenever the panel opens and on a configurable interval (30 seconds by default)
-- Surfaces SSH, authentication, network, and response errors in the panel
+- Treats first-time authentication as a guided setup state
+- Keeps SSH configuration, network, and response failures distinct from authentication
 
 ## Requirements
 
-- A working exe.dev account and SSH key (`ssh exe.dev ls` should succeed)
+- OpenSSH; the panel can launch exe.dev's interactive SSH-key registration flow
 - `wl-copy` for clipboard actions
 - A current Omarchy shell with bar plugin support
 
@@ -38,6 +39,8 @@ With the panel open:
 - `n`: create a new VM with exe.dev defaults
 - `f`: refresh the list
 - `esc`: close the panel
+
+When no registered SSH key is available, `enter` opens `ssh exe.dev` in a terminal for setup and `o` opens exe.dev's email/passkey sign-in page.
 
 Right-clicking the bar icon also refreshes the VM list.
 

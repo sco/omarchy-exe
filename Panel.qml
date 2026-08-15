@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Quickshell
 import qs.Commons
 import qs.Ui
 
@@ -9,7 +8,6 @@ Panel {
   id: root
   moduleName: "sco.exe"
   ipcTarget: "sco.exe"
-  manageIpc: false
 
   property int vmIndex: 0
   property bool cursorActive: false
@@ -19,18 +17,12 @@ Panel {
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   function selectedVm() {
-    if (exe.vms.length === 0) return null
-    return exe.vms[Math.max(0, Math.min(vmIndex, exe.vms.length - 1))]
-  }
-
-  function ensureCursor() {
-    vmIndex = Math.max(0, Math.min(vmIndex, Math.max(0, exe.vms.length - 1)))
+    return exe.vms.length ? exe.vms[Math.max(0, Math.min(vmIndex, exe.vms.length - 1))] : null
   }
 
   function moveCursor(dy) {
-    if (exe.vms.length === 0) return
     cursorActive = true
-    vmIndex = Math.max(0, Math.min(exe.vms.length - 1, vmIndex + dy))
+    if (!exe.needsAuth && exe.vms.length) vmIndex = Math.max(0, Math.min(exe.vms.length - 1, vmIndex + dy))
     scrollCursorIntoView()
   }
 
@@ -40,15 +32,29 @@ Panel {
     scrollCursorIntoView()
   }
 
+  function activate() {
+    if (exe.needsAuth) {
+      exe.openSetup()
+      close()
+      return
+    }
+    var vm = selectedVm()
+    if (vm) {
+      exe.openTerminal(vm)
+      close()
+    }
+  }
+
   function scrollCursorIntoView() {
-    if (!vmColumn || vmIndex < 0 || vmIndex >= vmColumn.children.length) return
+    if (exe.needsAuth || !vmColumn || vmIndex < 0 || vmIndex >= vmColumn.children.length) return
     var item = vmColumn.children[vmIndex]
     Qt.callLater(function() {
       var point = item.mapToItem(panelFlick.contentItem, 0, 0)
       var margin = Style.space(6)
+      var maxY = Math.max(0, panelFlick.contentHeight - panelFlick.height)
       if (point.y < panelFlick.contentY + margin) panelFlick.contentY = Math.max(0, point.y - margin)
       else if (point.y + item.height > panelFlick.contentY + panelFlick.height - margin)
-        panelFlick.contentY = Math.min(Math.max(0, panelFlick.contentHeight - panelFlick.height), point.y + item.height + margin - panelFlick.height)
+        panelFlick.contentY = Math.min(maxY, point.y + item.height + margin - panelFlick.height)
     })
   }
 
@@ -59,17 +65,16 @@ Panel {
     cursorActive = false
     panelFlick.contentY = 0
     exe.refresh()
-    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
   Service {
     id: exe
-    settings: root.settings
+    refreshIntervalSec: root.setting("refreshIntervalSec", 30)
   }
 
   Connections {
     target: exe
-    function onVmsChanged() { root.ensureCursor() }
+    function onVmsChanged() { root.vmIndex = Math.max(0, Math.min(root.vmIndex, Math.max(0, exe.vms.length - 1))) }
   }
 
   BarIconButton {
@@ -90,27 +95,24 @@ Panel {
     owner: root
     bar: root.bar
     open: root.opened
-    focusTarget: keyCatcher
+    focusTarget: keys
     contentWidth: panel.fittedContentWidth(Style.space(390))
     contentHeight: panel.fittedContentHeight(content.implicitHeight, Style.space(520))
 
     PanelKeyCatcher {
-      id: keyCatcher
+      id: keys
       anchors.fill: parent
       onMoveRequested: function(dx, dy) { root.moveCursor(dy) }
-      onActivateRequested: {
-        var vm = root.selectedVm()
-        if (vm) { exe.openTerminal(vm); root.close() }
-      }
+      onActivateRequested: root.activate()
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(text) {
         var key = text.toLowerCase()
         var vm = root.selectedVm()
-        if (key === "o" && vm) exe.openHttps(vm)
+        if (key === "o") exe.needsAuth ? exe.openSignIn() : exe.openHttps(vm)
         else if (key === "r" && vm) exe.restartVm(vm)
         else if (key === "c" && vm) exe.copySshDestination(vm)
-        else if (key === "n") exe.createVm()
+        else if (key === "n" && !exe.needsAuth) exe.createVm()
         else if (key === "f") exe.refresh()
       }
 
@@ -133,8 +135,7 @@ Panel {
           PanelHero {
             width: parent.width
             title: "exe.dev"
-            meta: exe.refreshing ? "Refreshing VMs…" : (exe.vms.length + (exe.vms.length === 1 ? " VM" : " VMs"))
-            detail: "N new"
+            meta: exe.refreshing ? "Refreshing…" : (exe.needsAuth ? "Connect your account" : (exe.vms.length + (exe.vms.length === 1 ? " VM" : " VMs")))
             foreground: root.foreground
             fontFamily: root.fontFamily
             iconComponent: Component {
@@ -164,11 +165,15 @@ Panel {
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.body
-            wrapMode: Text.Wrap
+          }
+
+          AuthRow {
+            visible: exe.needsAuth
+            width: parent.width
           }
 
           Text {
-            visible: !exe.refreshing && exe.lastError === "" && exe.vms.length === 0
+            visible: !exe.refreshing && !exe.needsAuth && exe.lastError === "" && exe.vms.length === 0
             width: parent.width
             text: "No VMs yet. Press N to create one."
             color: root.dim
@@ -178,22 +183,19 @@ Panel {
 
           Column {
             id: vmColumn
+            visible: !exe.needsAuth
             width: parent.width
             spacing: Style.space(4)
 
             Repeater {
               model: exe.vms
-              delegate: VmRow {
-                width: vmColumn.width
-                vm: modelData
-                rowIndex: index
-              }
+              delegate: VmRow { width: vmColumn.width; vm: modelData; rowIndex: index }
             }
           }
 
           Text {
             width: parent.width
-            text: "↵ SSH   O open   R restart   C copy   N new   F refresh"
+            text: exe.needsAuth ? "↵ connect   O passkey sign-in   F retry" : "↵ SSH   O open   R restart   C copy   N new   F refresh"
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -201,6 +203,32 @@ Panel {
           }
         }
       }
+    }
+  }
+
+  component AuthRow: CursorSurface {
+    hasCursor: root.cursorActive
+    foreground: root.foreground
+    implicitHeight: authLabels.implicitHeight + Style.space(18)
+
+    Column {
+      id: authLabels
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.margins: Style.space(10)
+      spacing: Style.space(2)
+
+      Text { text: "Connect exe.dev"; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.body; font.bold: true }
+      Text { width: parent.width; text: "Register an SSH key in a terminal, or press O to sign in with a passkey."; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; wrapMode: Text.Wrap }
+    }
+
+    MouseArea {
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onEntered: root.cursorActive = true
+      onClicked: root.activate()
     }
   }
 
@@ -229,24 +257,8 @@ Panel {
         Layout.fillWidth: true
         spacing: Style.space(1)
 
-        Text {
-          Layout.fillWidth: true
-          text: row.vm.vm_name
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.body
-          font.bold: true
-          elide: Text.ElideRight
-        }
-
-        Text {
-          Layout.fillWidth: true
-          text: [row.vm.status, row.vm.region_display, row.vm.ssh_dest].filter(function(value) { return value !== "" }).join("  ·  ")
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          elide: Text.ElideRight
-        }
+        Text { Layout.fillWidth: true; text: row.vm.vm_name; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.body; font.bold: true; elide: Text.ElideRight }
+        Text { Layout.fillWidth: true; text: [row.vm.status, row.vm.region_display, row.vm.ssh_dest].filter(function(value) { return value !== "" }).join("  ·  "); color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; elide: Text.ElideRight }
       }
     }
 
@@ -255,11 +267,7 @@ Panel {
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onEntered: root.setCursor(row.rowIndex)
-      onClicked: {
-        root.setCursor(row.rowIndex)
-        exe.openTerminal(row.vm)
-        root.close()
-      }
+      onClicked: { root.setCursor(row.rowIndex); root.activate() }
     }
   }
 }
