@@ -72,15 +72,6 @@ Panel {
     function onVmsChanged() { root.ensureCursor() }
   }
 
-  IpcHandler {
-    target: root.ipcTarget
-    function open(): void { root.open() }
-    function close(): void { root.close() }
-    function toggle(): void { root.toggle() }
-    function refresh(): string { exe.refresh(); return "ok" }
-    function status(): string { return exe.lastError || (exe.vms.length + " VMs") }
-  }
-
   BarIconButton {
     id: button
     anchors.fill: parent
