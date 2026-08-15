@@ -220,7 +220,7 @@ Panel {
       spacing: Style.space(2)
 
       Text { text: "Connect exe.dev"; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.body; font.bold: true }
-      Text { width: parent.width; text: "Register an SSH key in a terminal, or press O to sign in with a passkey."; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; wrapMode: Text.Wrap }
+      Text { width: parent.width; text: "Authorize once in a terminal. The panel stores a scoped 90-day API token in your keyring."; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption; wrapMode: Text.Wrap }
     }
 
     MouseArea {

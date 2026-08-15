@@ -4,18 +4,19 @@ A compact, keyboard-first Omarchy bar plugin for browsing and managing [exe.dev]
 
 ## Features
 
-- Lists VMs using `ssh exe.dev ls --json`
+- Lists and manages VMs through exe.dev's HTTPS API
 - Shows VM name, status, region, and SSH destination
 - Opens an SSH session in the configured Omarchy terminal
 - Opens a VM's HTTPS URL
 - Restarts a VM, copies its SSH destination, or creates a default VM
 - Refreshes whenever the panel opens and on a configurable interval (30 seconds by default)
-- Treats first-time authentication as a guided setup state
-- Keeps SSH configuration, network, and response failures distinct from authentication
+- Mints a scoped 90-day API token through one interactive SSH authorization
+- Stores the token in GNOME Keyring; it is never passed in process arguments
 
 ## Requirements
 
-- OpenSSH; the panel can launch exe.dev's interactive SSH-key registration flow
+- OpenSSH for initial authorization and interactive VM sessions
+- `curl` and `secret-tool` (both included with Omarchy)
 - `wl-copy` for clipboard actions
 - A current Omarchy shell with bar plugin support
 
@@ -40,7 +41,7 @@ With the panel open:
 - `f`: refresh the list
 - `esc`: close the panel
 
-When no registered SSH key is available, `enter` opens `ssh exe.dev` in a terminal for setup and `o` opens exe.dev's email/passkey sign-in page.
+When no API token is available, `enter` opens a terminal, asks SSH to mint a token limited to `ls`, `new`, and `restart`, stores it in GNOME Keyring, and reopens the panel. Press `o` to open exe.dev's email/passkey sign-in page.
 
 Right-clicking the bar icon also refreshes the VM list.
 

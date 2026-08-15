@@ -15,9 +15,11 @@ Item {
 
   property string operation: ""
   property string successMessage: ""
+  readonly property string apiScript: "token=$(secret-tool lookup service exe.dev application sco.exe 2>/dev/null) || exit 77; [ -n \"$token\" ] || exit 77; printf 'Authorization: Bearer %s\\n' \"$token\" | curl --fail-with-body --silent --show-error --request POST --header @- --data-binary \"$1\" https://exe.dev/exec"
 
-  function sshCommand(args) {
-    return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "exe.dev"].concat(args)
+  function apiCommand(args) {
+    var command = args.map(function(value) { return Util.shellQuote(String(value)) }).join(" ")
+    return ["bash", "-lc", apiScript, "bash", command]
   }
 
   function compact(value, fallback) {
@@ -38,7 +40,7 @@ Item {
   function refresh() {
     if (process.running) return
     refreshing = true
-    run(sshCommand(["ls", "--json"]), "list", "", "")
+    run(apiCommand(["ls", "--json"]), "list", "", "")
   }
 
   function applyList(raw) {
@@ -61,17 +63,19 @@ Item {
     }
   }
 
-  function applyFailure(raw) {
+  function applyFailure(exitCode, raw) {
     var message = compact(raw, "Could not reach exe.dev.")
     var lower = message.toLowerCase()
-    needsAuth = lower.indexOf("permission denied") !== -1
-      || lower.indexOf("register") !== -1
-      || lower.indexOf("authentication failed") !== -1
+    needsAuth = exitCode === 77
+      || lower.indexOf("401") !== -1
+      || lower.indexOf("invalid token") !== -1
+      || lower.indexOf("unauthorized") !== -1
     lastError = needsAuth ? "" : message
   }
 
   function openSetup() {
-    Quickshell.execDetached(["omarchy-launch-terminal", "ssh", "exe.dev"])
+    var setup = "set -e; token=$(ssh exe.dev ssh-key generate-api-key --label=omarchy-exe --cmds=ls,new,restart --exp=90d | grep -oE 'exe[01]\\.[A-Za-z0-9._-]+' | tail -1); [ -n \"$token\" ]; printf %s \"$token\" | secret-tool store --label='exe.dev Omarchy plugin' service exe.dev application sco.exe; omarchy-shell sco.exe open"
+    Quickshell.execDetached(["omarchy-launch-terminal", "bash", "-lc", setup])
   }
 
   function openSignIn() {
@@ -94,11 +98,11 @@ Item {
   }
 
   function restartVm(vm) {
-    if (vm && vm.vm_name) run(sshCommand(["restart", String(vm.vm_name), "--json"]), "action", "Restarting " + vm.vm_name + "…", "Restarted " + vm.vm_name)
+    if (vm && vm.vm_name) run(apiCommand(["restart", String(vm.vm_name), "--json"]), "action", "Restarting " + vm.vm_name + "…", "Restarted " + vm.vm_name)
   }
 
   function createVm() {
-    run(sshCommand(["new", "--json"]), "action", "Creating a VM…", "VM created")
+    run(apiCommand(["new", "--json"]), "action", "Creating a VM…", "VM created")
   }
 
   function showStatus(message) {
@@ -142,7 +146,7 @@ Item {
       root.actionStatus = ""
 
       if (exitCode !== 0) {
-        root.applyFailure(error || output)
+        root.applyFailure(exitCode, output || error)
       } else if (currentOperation === "list") {
         root.applyList(output)
       } else {
