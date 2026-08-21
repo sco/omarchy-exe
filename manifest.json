@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "sco.exe",
   "name": "exe.dev",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "author": "Scott Raymond",
   "license": "MIT",
   "description": "Browse and manage exe.dev VMs from the Omarchy bar.",
@@ -19,7 +19,8 @@
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
-      "refreshIntervalSec": 30
+      "refreshIntervalSec": 30,
+      "tokenLifetimeDays": 90
     },
     "schema": [
       {
@@ -30,6 +31,15 @@
         "max": 3600,
         "step": 5,
         "defaultValue": 30
+      },
+      {
+        "key": "tokenLifetimeDays",
+        "type": "integer",
+        "label": "API token lifetime (days)",
+        "min": 1,
+        "max": 365,
+        "step": 1,
+        "defaultValue": 90
       }
     ]
   }
