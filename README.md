@@ -77,7 +77,7 @@ secret-tool clear service exe.dev application sco.exe
 ## Security
 
 - The plugin runs unsandboxed inside the long-lived Omarchy shell, like every shell plugin.
-- It executes `ssh`, `curl`, `secret-tool`, `wl-copy`, and `omarchy-launch-terminal` as the current user; it never invokes `sudo` or installs software.
+- It executes `ssh`, `curl`, `secret-tool`, `wl-copy`, and `omarchy-launch-terminal` as the current user; it never requests elevated privileges or installs software.
 - Its HTTPS API token is scoped to `ls`, `new`, `restart`, and `whoami`.
 - The token is stored in GNOME Keyring and passed to `curl` through a header read from standard input, not through process arguments.
 - VM names, prompts, and destinations are shell-quoted or passed as discrete process arguments before execution.
