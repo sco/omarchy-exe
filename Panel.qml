@@ -182,12 +182,13 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     iconComponent: Component {
-      Image {
-        anchors.fill: parent
-        source: "logo.png"
-        fillMode: Image.PreserveAspectFit
-        smooth: true
-        mipmap: true
+      Item {
+        BlowfishIcon {
+          anchors.centerIn: parent
+          iconSize: Style.space(12)
+          color: exe.lastError ? root.urgent : root.barForeground
+          cutoutColor: root.bar ? root.bar.background : Color.background
+        }
       }
     }
     foreground: exe.lastError ? root.urgent : barForeground
@@ -249,16 +250,13 @@ Panel {
             width: parent.width
             implicitHeight: Math.max(headerFish.height, headerTitle.implicitHeight, headerTabs.implicitHeight)
 
-            Image {
+            BlowfishIcon {
               id: headerFish
-              width: Style.space(38)
-              height: Style.space(38)
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
-              source: "logo.png"
-              fillMode: Image.PreserveAspectFit
-              smooth: true
-              mipmap: true
+              iconSize: Style.space(38)
+              color: root.foreground
+              cutoutColor: Color.popups.background
             }
 
             Text {

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "sco.exe",
   "name": "exe.dev",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Scott Raymond",
   "license": "MIT",
   "description": "Browse and manage exe.dev VMs from the Omarchy bar.",

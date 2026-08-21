@@ -87,7 +87,7 @@ secret-tool clear service exe.dev application sco.exe
 
 The plugin follows Omarchy's current `bar-widget` conventions: `Panel.qml` is the entry point, `Service.qml` owns the backend processes, and the panel uses the shared `Panel`, `KeyboardPanel`, `PanelKeyCatcher`, and `CursorSurface` primitives.
 
-The only bundled visual asset is exe.dev's fish mark at `logo.png`. The three header icons use minimal inline SVG paths derived from PrimeIcons; row actions use the same icon font as Omarchy's built-in panels. See [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
+`BlowfishIcon.qml` renders an original low-resolution mark from native QML geometry, following the built-in Tailscale and Dropbox icon pattern. The three header icons use minimal inline SVG paths derived from PrimeIcons; row actions use the same icon font as Omarchy's built-in panels. See [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
 
 ## Documentation
 
@@ -100,7 +100,6 @@ The only bundled visual asset is exe.dev's fish mark at `logo.png`. The three he
 
 ## TODOs
 
-- Replace `logo.png` with an original derived mark and document its provenance.
 - Improve the GitHub description, homepage, social preview, and repository topics.
 - Add and refine the draft script for a short hype video, then record it.
 

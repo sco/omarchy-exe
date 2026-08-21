@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented here.
 
+## 1.0.1 - 2026-08-20
+
+- Replace the exe.dev bitmap logo with an original native-QML blowfish mark.
+- Refresh the marketplace preview with the new rights-clear glyph.
+
 ## 1.0.0 - 2026-08-20
 
 - Add a keyboard-first exe.dev VM panel for the Omarchy bar.
