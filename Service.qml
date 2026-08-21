@@ -7,9 +7,11 @@ Item {
   id: root
 
   property int refreshIntervalSec: 30
+  property int tokenLifetimeDays: 90
   property var vms: []
   property bool refreshing: false
   property bool needsAuth: false
+  property string username: ""
   property string lastError: ""
   property string actionStatus: ""
 
@@ -53,7 +55,9 @@ Item {
           status: String(vm.status || "unknown"),
           region_display: String(vm.region_display || vm.region || ""),
           ssh_dest: String(vm.ssh_dest || ""),
-          https_url: String(vm.https_url || "")
+          https_url: String(vm.https_url || ""),
+          shelley_url: String(vm.shelley_url || ""),
+          emoji: String(vm.emoji || "")
         }
       })
       needsAuth = false
@@ -74,7 +78,8 @@ Item {
   }
 
   function openSetup() {
-    var setup = "set -e; token=$(ssh exe.dev ssh-key generate-api-key --label=omarchy-exe --cmds=ls,new,restart --exp=90d | grep -oE 'exe[01]\\.[A-Za-z0-9._-]+' | tail -1); [ -n \"$token\" ]; printf %s \"$token\" | secret-tool store --label='exe.dev Omarchy plugin' service exe.dev application sco.exe; omarchy-shell sco.exe open"
+    var lifetime = Math.max(1, Math.min(365, parseInt(String(tokenLifetimeDays), 10) || 90))
+    var setup = "set -e; token=$(ssh exe.dev ssh-key generate-api-key --label=omarchy-exe --cmds=ls,new,restart,whoami --exp=" + lifetime + "d | grep -oE 'exe[01]\\.[A-Za-z0-9._-]+' | tail -1); [ -n \"$token\" ]; printf %s \"$token\" | secret-tool store --label='exe.dev Omarchy plugin' service exe.dev application sco.exe; omarchy-shell sco.exe open"
     Quickshell.execDetached(["omarchy-launch-terminal", "bash", "-lc", setup])
   }
 
@@ -86,9 +91,18 @@ Item {
     if (vm && vm.ssh_dest) Quickshell.execDetached(["omarchy-launch-terminal", "ssh", String(vm.ssh_dest)])
   }
 
+  function openLobby() {
+    Quickshell.execDetached(["omarchy-launch-terminal", "ssh", "exe.dev"])
+  }
+
   function openHttps(vm) {
     if (vm && vm.https_url) Qt.openUrlExternally(String(vm.https_url))
     else lastError = "This VM has no HTTPS URL."
+  }
+
+  function openShelley(vm) {
+    if (vm && vm.shelley_url) Qt.openUrlExternally(String(vm.shelley_url))
+    else lastError = "Shelley is not available on this VM."
   }
 
   function copySshDestination(vm) {
@@ -101,8 +115,13 @@ Item {
     if (vm && vm.vm_name) run(apiCommand(["restart", String(vm.vm_name), "--json"]), "action", "Restarting " + vm.vm_name + "…", "Restarted " + vm.vm_name)
   }
 
-  function createVm() {
-    run(apiCommand(["new", "--json"]), "action", "Creating a VM…", "VM created")
+  function createVm(name, prompt) {
+    var args = ["new", "--json"]
+    var vmName = String(name || "").trim()
+    var vmPrompt = String(prompt || "").trim()
+    if (vmName) args.push("--name=" + vmName)
+    if (vmPrompt) args.push("--prompt=" + vmPrompt)
+    run(apiCommand(args), "action", "Creating " + (vmName || "VM") + "…", "Created " + (vmName || "VM"))
   }
 
   function showStatus(message) {
@@ -116,6 +135,23 @@ Item {
     running: true
     triggeredOnStart: true
     onTriggered: root.refresh()
+  }
+
+  Process {
+    id: identityProcess
+    running: true
+    command: ["bash", "-lc", "token=$(secret-tool lookup service exe.dev application sco.exe 2>/dev/null); if [ -n \"$token\" ]; then response=$(printf 'Authorization: Bearer %s\\n' \"$token\" | curl --fail-with-body --silent --request POST --header @- --data-binary 'whoami --json' https://exe.dev/exec 2>/dev/null) && { printf %s \"$response\"; exit; }; fi; ssh -G exe.dev 2>/dev/null | sed -n 's/^user //p' | head -1"]
+    stdout: StdioCollector { id: identityOutput; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) return
+      var raw = String(identityOutput.text || "").trim()
+      try {
+        var identity = JSON.parse(raw)
+        root.username = String(identity.username || identity.user || identity.name || identity.email || "").split("@")[0]
+      } catch (error) {
+        root.username = raw
+      }
+    }
   }
 
   Timer {
